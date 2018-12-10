@@ -40,8 +40,6 @@ mesh = mtf.Mesh(graph, "my_mesh")
 # tf Graph input
 batch_dim = mtf.Dimension("batch", batch_size)
 io_dim = mtf.Dimension("io", num_input)
-hidden_1_dim = mtf.Dimension("hidden_1", n_hidden_1)
-hidden_2_dim = mtf.Dimension("hidden_2", n_hidden_2)
 classes_dim = mtf.Dimension("classes", num_classes)
 
 X = tf.placeholder("float", [batch_size, num_input])
@@ -50,44 +48,20 @@ Y = tf.placeholder("float", [batch_size, num_classes])
 x = mtf.import_tf_tensor(mesh, X, [batch_dim, io_dim])
 y = mtf.import_tf_tensor(mesh, Y, [batch_dim, classes_dim])
 
-# Store layers weight & bias
-weights = {
-    'h1': mtf.get_variable(mesh, "h1", [io_dim, hidden_1_dim]),
-    'h2': mtf.get_variable(mesh, "h2", [hidden_1_dim, hidden_2_dim]),
-    'out': mtf.get_variable(mesh, "h_out", [hidden_2_dim, classes_dim])
-}
-
-biases = {
-    'b1': mtf.get_variable(mesh, "b1", [hidden_1_dim]),
-    'b2': mtf.get_variable(mesh, "b2", [hidden_2_dim]),
-    'out': mtf.get_variable(mesh, "b_out", [classes_dim])
-}
-
+weight = mtf.get_variable(mesh, "weight", [io_dim, classes_dim])
+bias = mtf.get_variable(mesh, "bias", [classes_dim])
 
 # Create model
-def neural_net(x):
-    # Hidden fully connected layer with 256 neurons
-    layer_1 = mtf.einsum([x, weights['h1']], [batch_dim, hidden_1_dim]) + biases['b1']
-    # layer_1 = tf.add(tf.matmul(x, weights['h1']), biases['b1'])
-    # Hidden fully connected layer with 256 neurons
-    layer_2 = mtf.einsum([layer_1, weights['h2']], [batch_dim, hidden_2_dim]) + biases['b2']
-    # layer_2 = tf.add(tf.matmul(layer_1, weights['h2']), biases['b2'])
-    # Output fully connected layer with a neuron for each class
-    out_layer = mtf.einsum([layer_2, weights['out']], [batch_dim, classes_dim]) + biases['out']
-    # out_layer = tf.matmul(layer_2, weights['out']) + biases['out']
-    return out_layer
-
-# Construct model
-logits = neural_net(x)
+logits = mtf.einsum([x, weight], [batch_dim, classes_dim]) + bias
 loss = mtf.layers.softmax_cross_entropy_with_logits(
     logits, y, classes_dim)
 loss = mtf.reduce_mean(loss)
 
-mesh_shape = mtf.convert_to_shape("b1:2;b2:2")
-layout_rules = mtf.convert_to_layout_rules("batch:b1;io:b2")
+mesh_shape = mtf.convert_to_shape("c1:1;c2:4")
+layout_rules = mtf.convert_to_layout_rules("batch:c1;io:c2")
 
-mesh_size = 4
-mesh_devices = [""] * mesh_size
+mesh_size = mesh_shape.size
+mesh_devices = ["/cpu:0"] * mesh_size
 mesh_impl = mtf.placement_mesh_impl.PlacementMeshImpl(
     mesh_shape, layout_rules, mesh_devices)
 
@@ -137,3 +111,4 @@ with tf.Session() as sess:
     print("Testing Accuracy:", \
         sess.run(accuracy, feed_dict={X: mnist.test.images,
                                       Y: mnist.test.labels}))
+
