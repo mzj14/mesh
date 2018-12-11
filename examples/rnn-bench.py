@@ -16,6 +16,8 @@
 """MNIST using Mesh TensorFlow and TF Estimator.
 
 This is an illustration, not a good model.
+
+# python rnn-bench.py --log_steps=10 --mesh_shape="b1:2;b2:2" --layout="input:b1;batch:b2"
 """
 
 from __future__ import absolute_import
@@ -37,6 +39,7 @@ tf.flags.DEFINE_integer("hidden_size", 512, "Size of each hidden layer.")
 tf.flags.DEFINE_integer("train_epochs", 1, "Total number of training epochs.")
 tf.flags.DEFINE_integer("epochs_between_evals", 1,
                         "# of epochs between evaluations.")
+tf.flags.DEFINE_integer("log_steps", 10, "Number of log steps as a logging unit")
 tf.flags.DEFINE_string("mesh_shape", "b1:2;b2:2", "mesh shape")
 tf.flags.DEFINE_string("layout", "input:b1;batch:b2",
                        "layout rules")
@@ -51,7 +54,7 @@ def mnist_model(image, labels, mesh, hs_t):
     image: tf.Tensor with shape [batch, 28*28]
     labels: a tf.Tensor with shape [batch] and dtype tf.int32
     mesh: a mtf.Mesh
-
+    hs_t:
   Returns:
     logits: a tf.Tensor with shape [batch, 10]
     loss: a mtf.Tensor with shape []
@@ -188,7 +191,7 @@ def run_mnist():
   mnist_classifier = tf.estimator.Estimator(
       model_fn=model_fn,
       model_dir=FLAGS.model_dir,
-      config=tf.estimator.RunConfig(log_step_count_steps=1))
+      config=tf.estimator.RunConfig(log_step_count_steps=FLAGS.log_steps))
 
   # Set up training and evaluation input functions.
   def train_input_fn():
