@@ -206,7 +206,7 @@ def run_mnist():
     # enough dataset that we can easily shuffle the full epoch.
     ds = dataset.train(FLAGS.data_dir)
     # ds_batched = ds.cache().shuffle(buffer_size=50000).batch(FLAGS.batch_size)
-    ds_batched = ds.cache().shuffle(buffer_size=400).batch(FLAGS.batch_size)
+    ds_batched = ds.cache().batch(FLAGS.batch_size)
     # Iterate through the dataset a set number (`epochs_between_evals`) of times
     # during each training session.
     ds = ds_batched.repeat(FLAGS.epochs_between_evals)
