@@ -35,13 +35,13 @@ tf.flags.DEFINE_string("model_dir", "model", "Estimator model_dir")
 tf.flags.DEFINE_integer("batch_size", 200,
                         "Mini-batch size for the training. Note that this "
                         "is the global batch size and not the per-shard batch.")
-tf.flags.DEFINE_integer("hidden_size", 512, "Size of each hidden layer.")
+tf.flags.DEFINE_integer("hidden_size", 128, "Size of each hidden layer.")
 tf.flags.DEFINE_integer("train_epochs", 1, "Total number of training epochs.")
 tf.flags.DEFINE_integer("epochs_between_evals", 1,
                         "# of epochs between evaluations.")
 tf.flags.DEFINE_integer("log_steps", 10, "Number of log steps as a logging unit")
 tf.flags.DEFINE_string("mesh_shape", "b1:2;b2:2", "mesh shape")
-tf.flags.DEFINE_string("layout", "input:b1;batch:b2",
+tf.flags.DEFINE_string("layout", "hidden_1:b1;classes:b2",
                        "layout rules")
 
 FLAGS = tf.flags.FLAGS
@@ -72,7 +72,7 @@ def mnist_model(image, labels, mesh, hs_t):
   hidden_dim_2 = mtf.Dimension("hidden_2", FLAGS.hidden_size)
 
   x = mtf.import_tf_tensor(mesh, tf.reshape(image, [FLAGS.batch_size, 28, 28]), [batch_dim, timesteps_dim, input_dim])
-  y = mtf.import_tf_tensor(mesh, labels, [batch_dim])
+  y = mtf.import_tf_tensor(mesh, tf.reshape(labels, [FLAGS.batch_size]), [batch_dim])
   hs_t = mtf.import_tf_tensor(mesh, hs_t, [batch_dim, hidden_dim_1])
 
   Wxh = mtf.get_variable(mesh, "Wxh", [input_dim, hidden_dim_2])
@@ -112,7 +112,7 @@ def model_fn(features, labels, mode, params):
   layout_rules = mtf.convert_to_layout_rules(FLAGS.layout)
   mesh_size = mesh_shape.size
   print("mesh_shape.size = ", mesh_shape.size)
-  mesh_devices = ["/cpu:0"] * mesh_size
+  mesh_devices = [""] * mesh_size
   mesh_impl = mtf.placement_mesh_impl.PlacementMeshImpl(
       mesh_shape, layout_rules, mesh_devices)
 

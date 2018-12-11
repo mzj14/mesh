@@ -40,8 +40,8 @@ tf.flags.DEFINE_integer("epochs_between_evals", 1,
 tf.flags.DEFINE_integer("eval_steps", 0,
                         "Total number of evaluation steps. If `0`, evaluation "
                         "after training is skipped.")
-tf.flags.DEFINE_string("mesh_shape", "b1:2;b2:2", "mesh shape")
-tf.flags.DEFINE_string("layout", "row_blocks:b1;col_blocks:b2",
+tf.flags.DEFINE_string("mesh_shape", "all:4", "mesh shape")
+tf.flags.DEFINE_string("layout", "hidden1:all",
                        "layout rules")
 
 FLAGS = tf.flags.FLAGS

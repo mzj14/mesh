@@ -16,6 +16,8 @@
 """MNIST using Mesh TensorFlow and TF Estimator.
 
 This is an illustration, not a good model.
+
+# python rnn-bench.py --log_steps=10 --mesh_shape="b1:2;b2:2" --layout="input:b1;batch:b2"
 """
 
 from __future__ import absolute_import
@@ -37,11 +39,12 @@ tf.flags.DEFINE_integer("hidden_size", 512, "Size of each hidden layer.")
 tf.flags.DEFINE_integer("train_epochs", 1, "Total number of training epochs.")
 tf.flags.DEFINE_integer("epochs_between_evals", 1,
                         "# of epochs between evaluations.")
+tf.flags.DEFINE_integer("log_steps", 10, "Number of log steps as a logging unit")
 tf.flags.DEFINE_integer("eval_steps", 0,
                         "Total number of evaluation steps. If `0`, evaluation "
                         "after training is skipped.")
-tf.flags.DEFINE_string("mesh_shape", "b1:2;b2:2", "mesh shape")
-tf.flags.DEFINE_string("layout", "rows:b1;batch:b2",
+tf.flags.DEFINE_string("mesh_shape", "b1:4", "mesh shape")
+tf.flags.DEFINE_string("layout", "hidden:b1",
                        "layout rules")
 
 FLAGS = tf.flags.FLAGS
@@ -63,15 +66,19 @@ def mnist_model(image, labels, mesh):
   rows_dim = mtf.Dimension("rows", 28)
   cols_dim = mtf.Dimension("cols", 28)
   classes_dim = mtf.Dimension("classes", 10)
-  hidden_dim = mtf.Dimension("hidden", 1024)
+  hidden_dim = mtf.Dimension("hidden", FLAGS.hidden_size)
 
   x = mtf.import_tf_tensor(mesh, tf.reshape(image, [FLAGS.batch_size, 28, 28]), [batch_dim, rows_dim, cols_dim])
-  y = mtf.import_tf_tensor(mesh, labels, [batch_dim])
+  y = mtf.import_tf_tensor(mesh, tf.reshape(labels, [FLAGS.batch_size]), [batch_dim])
 
-  w = mtf.get_variable(mesh, "w", [rows_dim, cols_dim, classes_dim])
-  b = mtf.get_variable(mesh, "b", [classes_dim])
+  w1 = mtf.get_variable(mesh, "w1", [rows_dim, cols_dim, hidden_dim])
+  b1 = mtf.get_variable(mesh, "b1", [hidden_dim])
 
-  logits = mtf.relu(mtf.einsum([x, w], [batch_dim, classes_dim]) + b)
+  w2 = mtf.get_variable(mesh, "w2", [hidden_dim, classes_dim])
+  b2 = mtf.get_variable(mesh, "b2", [classes_dim])
+
+  hidden = mtf.relu(mtf.einsum([x, w1], [batch_dim, hidden_dim]) + b1)
+  logits = mtf.relu(mtf.einsum([hidden, w2], [batch_dim, classes_dim]) + b2)
 
   if labels is None:
     loss = None
@@ -91,13 +98,11 @@ def model_fn(features, labels, mode, params):
   # wrapped graph named "my_mesh"
   mesh = mtf.Mesh(graph, "my_mesh")
   logits, loss = mnist_model(features, labels, mesh)
-  # dimension "b1" is 2; dimension "b2" is 2;
   mesh_shape = mtf.convert_to_shape(FLAGS.mesh_shape)
-  # 1st dimension of tensor is split by "b1"; 2nd by "b2"
   layout_rules = mtf.convert_to_layout_rules(FLAGS.layout)
   mesh_size = mesh_shape.size
   print("mesh_shape.size = ", mesh_shape.size)
-  mesh_devices = ["/cpu:0"] * mesh_size
+  mesh_devices = [""] * mesh_size
   mesh_impl = mtf.placement_mesh_impl.PlacementMeshImpl(
       mesh_shape, layout_rules, mesh_devices)
 
@@ -176,7 +181,8 @@ def run_mnist():
   """Run MNIST training and eval loop."""
   mnist_classifier = tf.estimator.Estimator(
       model_fn=model_fn,
-      model_dir=FLAGS.model_dir)
+      model_dir=FLAGS.model_dir,
+      config=tf.estimator.RunConfig(log_step_count_steps=FLAGS.log_steps))
 
   # Set up training and evaluation input functions.
   def train_input_fn():
@@ -211,4 +217,3 @@ def main(_):
 if __name__ == "__main__":
   tf.logging.set_verbosity(tf.logging.INFO)
   tf.app.run()
-
