@@ -41,7 +41,7 @@ tf.flags.DEFINE_integer("eval_steps", 0,
                         "Total number of evaluation steps. If `0`, evaluation "
                         "after training is skipped.")
 tf.flags.DEFINE_string("mesh_shape", "b1:2;b2:2", "mesh shape")
-tf.flags.DEFINE_string("layout", "rows:b1;batch:b2",
+tf.flags.DEFINE_string("layout", "input:b1;batch:b2",
                        "layout rules")
 
 FLAGS = tf.flags.FLAGS
@@ -107,6 +107,8 @@ def model_fn(features, labels, mode, params):
   graph = mtf.Graph()
   # wrapped graph named "my_mesh"
   mesh = mtf.Mesh(graph, "my_mesh")
+  hs_t = tf.constant(0, dtype=tf.float32, shape=[200, 128])
+  logits, loss, hs_t = mnist_model(features, labels, mesh, hs_t)
   # dimension "b1" is 2; dimension "b2" is 2;
   mesh_shape = mtf.convert_to_shape(FLAGS.mesh_shape)
   # 1st dimension of tensor is split by "b1"; 2nd by "b2"
@@ -117,19 +119,14 @@ def model_fn(features, labels, mode, params):
   mesh_impl = mtf.placement_mesh_impl.PlacementMeshImpl(
       mesh_shape, layout_rules, mesh_devices)
 
-  lowering = mtf.Lowering(graph, {mesh: mesh_impl})
-  restore_hook = mtf.MtfRestoreHook(lowering)
-
-  if mode == tf.estimator.ModeKeys.TRAIN:
-    hs_t = tf.constant(0, shape=[200, 128])
-
-  logits, loss, hs_t = mnist_model(features, labels, mesh, hs_t)
-
   if mode == tf.estimator.ModeKeys.TRAIN:
     var_grads = mtf.gradients(
         [loss], [v.outputs[0] for v in graph.trainable_variables])
     optimizer = mtf.optimize.AdafactorOptimizer()
     update_ops = optimizer.apply_grads(var_grads, graph.trainable_variables)
+
+  lowering = mtf.Lowering(graph, {mesh: mesh_impl})
+  restore_hook = mtf.MtfRestoreHook(lowering)
 
   tf_logits = lowering.export_to_tf_tensor(logits)
   if mode != tf.estimator.ModeKeys.PREDICT:
@@ -197,7 +194,8 @@ def run_mnist():
   """Run MNIST training and eval loop."""
   mnist_classifier = tf.estimator.Estimator(
       model_fn=model_fn,
-      model_dir=FLAGS.model_dir)
+      model_dir=FLAGS.model_dir,
+      config=tf.estimator.RunConfig(log_step_count_steps=1))
 
   # Set up training and evaluation input functions.
   def train_input_fn():
@@ -208,7 +206,7 @@ def run_mnist():
     # enough dataset that we can easily shuffle the full epoch.
     ds = dataset.train(FLAGS.data_dir)
     # ds_batched = ds.cache().shuffle(buffer_size=50000).batch(FLAGS.batch_size)
-    ds_batched = ds.cache().batch(FLAGS.batch_size)
+    ds_batched = ds.cache().shuffle(buffer_size=400).batch(FLAGS.batch_size)
     # Iterate through the dataset a set number (`epochs_between_evals`) of times
     # during each training session.
     ds = ds_batched.repeat(FLAGS.epochs_between_evals)
