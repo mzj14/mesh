@@ -37,9 +37,6 @@ tf.flags.DEFINE_integer("hidden_size", 512, "Size of each hidden layer.")
 tf.flags.DEFINE_integer("train_epochs", 1, "Total number of training epochs.")
 tf.flags.DEFINE_integer("epochs_between_evals", 1,
                         "# of epochs between evaluations.")
-tf.flags.DEFINE_integer("eval_steps", 0,
-                        "Total number of evaluation steps. If `0`, evaluation "
-                        "after training is skipped.")
 tf.flags.DEFINE_string("mesh_shape", "b1:2;b2:2", "mesh shape")
 tf.flags.DEFINE_string("layout", "input:b1;batch:b2",
                        "layout rules")
@@ -61,15 +58,14 @@ def mnist_model(image, labels, mesh, hs_t):
   """
   input_num = 28
   timesteps_num = 28
-  hidden_num = 128
   classes_num = 10
 
   batch_dim = mtf.Dimension("batch", FLAGS.batch_size)
   input_dim = mtf.Dimension("input", input_num)
   timesteps_dim = mtf.Dimension("timesteps", timesteps_num)
   classes_dim = mtf.Dimension("classes", classes_num)
-  hidden_dim_1 = mtf.Dimension("hidden_1", hidden_num)
-  hidden_dim_2 = mtf.Dimension("hidden_2", hidden_num)
+  hidden_dim_1 = mtf.Dimension("hidden_1", FLAGS.hidden_size)
+  hidden_dim_2 = mtf.Dimension("hidden_2", FLAGS.hidden_size)
 
   x = mtf.import_tf_tensor(mesh, tf.reshape(image, [FLAGS.batch_size, 28, 28]), [batch_dim, timesteps_dim, input_dim])
   y = mtf.import_tf_tensor(mesh, labels, [batch_dim])
@@ -78,7 +74,6 @@ def mnist_model(image, labels, mesh, hs_t):
   Wxh = mtf.get_variable(mesh, "Wxh", [input_dim, hidden_dim_2])
   Whh = mtf.get_variable(mesh, "Whh", [hidden_dim_1, hidden_dim_2])
   Why = mtf.get_variable(mesh, "Why", [hidden_dim_2, classes_dim])
-  # hs_t = mtf.get_variable(mesh, 'hs_t', [batch_dim, hidden_dim])
   bh  = mtf.get_variable(mesh, "bh", [hidden_dim_2])
   by  = mtf.get_variable(mesh, "by", [classes_dim])
 
@@ -86,8 +81,7 @@ def mnist_model(image, labels, mesh, hs_t):
 
   for xs_t in x_list:
       hs_t = mtf.tanh(mtf.einsum([xs_t, Wxh], [batch_dim, hidden_dim_2]) + mtf.einsum([hs_t, Whh], [batch_dim, hidden_dim_2]) + bh)
-
-  logits = mtf.einsum([hs_t, Why], [batch_dim, classes_dim]) + by
+      logits = mtf.einsum([hs_t, Why], [batch_dim, classes_dim]) + by
 
   if labels is None:
     loss = None
@@ -95,7 +89,6 @@ def mnist_model(image, labels, mesh, hs_t):
     loss = mtf.layers.softmax_cross_entropy_with_logits(
         logits, mtf.one_hot(y, classes_dim), classes_dim)
     loss = mtf.reduce_mean(loss)
-  # print("mnist_model")
   return logits, loss, hs_t
 
 
@@ -107,7 +100,7 @@ def model_fn(features, labels, mode, params):
   graph = mtf.Graph()
   # wrapped graph named "my_mesh"
   mesh = mtf.Mesh(graph, "my_mesh")
-  hs_t = tf.constant(0, dtype=tf.float32, shape=[200, 128])
+  hs_t = tf.constant(0, dtype=tf.float32, shape=[FLAGS.batch_size, FLAGS.hidden_size])
   logits, loss, hs_t = mnist_model(features, labels, mesh, hs_t)
   # dimension "b1" is 2; dimension "b2" is 2;
   mesh_shape = mtf.convert_to_shape(FLAGS.mesh_shape)
@@ -230,4 +223,3 @@ def main(_):
 if __name__ == "__main__":
   tf.logging.set_verbosity(tf.logging.INFO)
   tf.app.run()
-
