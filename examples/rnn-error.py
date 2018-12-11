@@ -47,7 +47,7 @@ tf.flags.DEFINE_string("layout", "rows:b1;batch:b2",
 FLAGS = tf.flags.FLAGS
 
 
-def mnist_model(image, labels, mesh, lowering):
+def mnist_model(image, labels, mesh, hs_t):
   """The model.
 
   Args:
@@ -68,34 +68,26 @@ def mnist_model(image, labels, mesh, lowering):
   input_dim = mtf.Dimension("input", input_num)
   timesteps_dim = mtf.Dimension("timesteps", timesteps_num)
   classes_dim = mtf.Dimension("classes", classes_num)
-  hidden_dim = mtf.Dimension("hidden", hidden_num)
+  hidden_dim_1 = mtf.Dimension("hidden_1", hidden_num)
+  hidden_dim_2 = mtf.Dimension("hidden_2", hidden_num)
 
   x = mtf.import_tf_tensor(mesh, tf.reshape(image, [FLAGS.batch_size, 28, 28]), [batch_dim, timesteps_dim, input_dim])
   y = mtf.import_tf_tensor(mesh, labels, [batch_dim])
+  hs_t = mtf.import_tf_tensor(mesh, hs_t, [batch_dim, hidden_dim_1])
 
-  w = mtf.get_variable(mesh, "w", [hidden_dim, classes_dim])
-  b = mtf.get_variable(mesh, "b", [classes_dim])
+  Wxh = mtf.get_variable(mesh, "Wxh", [input_dim, hidden_dim_2])
+  Whh = mtf.get_variable(mesh, "Whh", [hidden_dim_1, hidden_dim_2])
+  Why = mtf.get_variable(mesh, "Why", [hidden_dim_2, classes_dim])
+  # hs_t = mtf.get_variable(mesh, 'hs_t', [batch_dim, hidden_dim])
+  bh  = mtf.get_variable(mesh, "bh", [hidden_dim_2])
+  by  = mtf.get_variable(mesh, "by", [classes_dim])
 
-  def RNN(x, w, b):
+  x_list = mtf.unstack(x, timesteps_dim)
 
-      # Prepare data shape to match `rnn` function requirements
-      # Current data input shape: (batch_size, timesteps, n_input)
-      # Required shape: 'timesteps' tensors list of shape (batch_size, n_input)
+  for xs_t in x_list:
+      hs_t = mtf.tanh(mtf.einsum([xs_t, Wxh], [batch_dim, hidden_dim_2]) + mtf.einsum([hs_t, Whh], [batch_dim, hidden_dim_2]) + bh)
 
-      # Unstack to get a list of 'timesteps' tensors of shape (batch_size, n_input)
-      tf_x = lowering.export_to_tf_tensor(x)
-
-      tf_x = tf.unstack(tf_x, timesteps, 1)
-      # Define a lstm cell with tensorflow
-      lstm_cell = rnn.BasicLSTMCell(hidden_num, forget_bias=1.0)
-      # Get lstm cell output
-      outputs, states = rnn.static_rnn(lstm_cell, tf_x, dtype=tf.float32)
-
-      last_output = lowering.import_tf_tensor(outputs[-1])
-      # Linear activation, using rnn inner loop last output
-      return mtf.einsum([outputs[-1], w], [batch_dim, classes_dim]) + b
-
-  logits = RNN(x, w, b)
+  logits = mtf.einsum([hs_t, Why], [batch_dim, classes_dim]) + by
 
   if labels is None:
     loss = None
@@ -103,7 +95,8 @@ def mnist_model(image, labels, mesh, lowering):
     loss = mtf.layers.softmax_cross_entropy_with_logits(
         logits, mtf.one_hot(y, classes_dim), classes_dim)
     loss = mtf.reduce_mean(loss)
-  return logits, loss
+  # print("mnist_model")
+  return logits, loss, hs_t
 
 
 def model_fn(features, labels, mode, params):
@@ -127,8 +120,11 @@ def model_fn(features, labels, mode, params):
   lowering = mtf.Lowering(graph, {mesh: mesh_impl})
   restore_hook = mtf.MtfRestoreHook(lowering)
 
-  logits, loss = mnist_model(features, labels, mesh)
-  
+  if mode == tf.estimator.ModeKeys.TRAIN:
+    hs_t = tf.constant(0, shape=[200, 128])
+
+  logits, loss, hs_t = mnist_model(features, labels, mesh, hs_t)
+
   if mode == tf.estimator.ModeKeys.TRAIN:
     var_grads = mtf.gradients(
         [loss], [v.outputs[0] for v in graph.trainable_variables])
