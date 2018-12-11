@@ -54,10 +54,11 @@ def mnist_model(image, labels, mesh, hs_t):
     image: tf.Tensor with shape [batch, 28*28]
     labels: a tf.Tensor with shape [batch] and dtype tf.int32
     mesh: a mtf.Mesh
-    hs_t:
+    hs_t: a mtf.Tensor with shape [batch, hidden_1]
   Returns:
-    logits: a tf.Tensor with shape [batch, 10]
+    logits: a mtf.Tensor with shape [batch, 10]
     loss: a mtf.Tensor with shape []
+    hs_t: an updated mtf.Tensor
   """
   input_num = 28
   timesteps_num = 28
