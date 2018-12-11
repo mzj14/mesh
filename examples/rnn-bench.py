@@ -17,7 +17,7 @@
 
 This is an illustration, not a good model.
 
-# python rnn-bench.py --log_steps=10 --mesh_shape="b1:2;b2:2" --layout="input:b1;batch:b2"
+# python rnn-bench.py --hidden_size=128 --log_steps=10 --mesh_shape="b1:2;b2:2" --layout="hidden_1:b1;hidden_2:b2"
 """
 
 from __future__ import absolute_import
