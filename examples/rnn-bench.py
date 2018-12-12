@@ -17,7 +17,7 @@
 
 This is an illustration, not a good model.
 
-# python rnn-bench.py --hidden_size=200 --train_epochs=3 --epochs_between_evals=3 --log_steps=1 --eval_steps=10000 --mesh_shape="b1:2;b2:2" --layout="hidden_1:b1;hidden_2:b2"
+# python rnn-bench.py --hidden_size=200 --train_epochs=3 --epochs_between_evals=3 --log_steps=1 --eval_steps=2000 --mesh_shape="b1:2;b2:2" --layout="hidden_1:b1;hidden_2:b2"
 """
 
 from __future__ import absolute_import
@@ -213,7 +213,7 @@ def run_mnist():
     return ds
 
   def eval_input_fn():
-    return dataset.train(FLAGS.data_dir).batch(FLAGS.batch_size).repeat()
+    return dataset.test(FLAGS.data_dir).batch(FLAGS.batch_size).repeat()
 
   # Train and evaluate model.
   for _ in range(FLAGS.train_epochs // FLAGS.epochs_between_evals):

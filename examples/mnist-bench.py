@@ -17,7 +17,7 @@
 
 This is an illustration, not a good model.
 
-# python mnist-bench.py --hidden_size=400 --train_epochs=3 --epochs_between_evals=3 --log_steps=1 --eval_steps=10000 --mesh_shape="b1:2;b2:2" --layout="input:b1;batch:b2"
+# python mnist-bench.py --hidden_size=800 --train_epochs=3 --epochs_between_evals=3 --log_steps=1 --eval_steps=10000 --mesh_shape="b1:2;b2:2" --layout="input:b1;batch:b2"
 """
 
 from __future__ import absolute_import
