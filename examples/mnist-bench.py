@@ -17,7 +17,7 @@
 
 This is an illustration, not a good model.
 
-# python rnn-bench.py --log_steps=10 --mesh_shape="b1:2;b2:2" --layout="input:b1;batch:b2"
+# python mnist-bench.py --hidden_size=400 --train_epochs=3 --epochs_between_evals=3 --log_steps=1 --eval_steps=10000 --mesh_shape="b1:2;b2:2" --layout="input:b1;batch:b2"
 """
 
 from __future__ import absolute_import
@@ -35,12 +35,12 @@ tf.flags.DEFINE_string("model_dir", "model", "Estimator model_dir")
 tf.flags.DEFINE_integer("batch_size", 200,
                         "Mini-batch size for the training. Note that this "
                         "is the global batch size and not the per-shard batch.")
-tf.flags.DEFINE_integer("hidden_size", 512, "Size of each hidden layer.")
+tf.flags.DEFINE_integer("hidden_size", 400, "Size of each hidden layer.")
 tf.flags.DEFINE_integer("train_epochs", 1, "Total number of training epochs.")
 tf.flags.DEFINE_integer("epochs_between_evals", 1,
                         "# of epochs between evaluations.")
 tf.flags.DEFINE_integer("log_steps", 10, "Number of log steps as a logging unit")
-tf.flags.DEFINE_integer("eval_steps", 0,
+tf.flags.DEFINE_integer("eval_steps", 10000,
                         "Total number of evaluation steps. If `0`, evaluation "
                         "after training is skipped.")
 tf.flags.DEFINE_string("mesh_shape", "b1:4", "mesh shape")
@@ -87,7 +87,6 @@ def mnist_model(image, labels, mesh):
         logits, mtf.one_hot(y, classes_dim), classes_dim)
     loss = mtf.reduce_mean(loss)
   return logits, loss
-
 
 def model_fn(features, labels, mode, params):
   """The model_fn argument for creating an Estimator."""
@@ -200,13 +199,12 @@ def run_mnist():
     return ds
 
   def eval_input_fn():
-    return dataset.test(FLAGS.data_dir).batch(
-        FLAGS.batch_size).make_one_shot_iterator().get_next()
+    return dataset.test(FLAGS.data_dir).batch(FLAGS.batch_size).repeat()
 
   # Train and evaluate model.
   for _ in range(FLAGS.train_epochs // FLAGS.epochs_between_evals):
     mnist_classifier.train(input_fn=train_input_fn, hooks=None)
-    eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn)
+    eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn, steps=FLAGS.eval_steps)
     print("\nEvaluation results:\n\t%s\n" % eval_results)
 
 

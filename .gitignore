@@ -21,3 +21,6 @@ dist/
 .idea/
 data-source/
 model/
+*.log
+temp
+temp/

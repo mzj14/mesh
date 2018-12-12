@@ -17,7 +17,7 @@
 
 This is an illustration, not a good model.
 
-# python rnn-bench.py --hidden_size=128 --log_steps=10 --mesh_shape="b1:2;b2:2" --layout="hidden_1:b1;hidden_2:b2"
+# python rnn-bench.py --hidden_size=200 --train_epochs=3 --epochs_between_evals=3 --log_steps=1 --eval_steps=10000 --mesh_shape="b1:2;b2:2" --layout="hidden_1:b1;hidden_2:b2"
 """
 
 from __future__ import absolute_import
@@ -27,7 +27,7 @@ from __future__ import print_function
 import mesh_tensorflow as mtf
 import mnist_dataset as dataset  # local file import
 import tensorflow as tf
-from tensorflow.contrib import rnn
+import time
 
 tf.flags.DEFINE_string("data_dir", "data-source",
                        "Path to directory containing the MNIST dataset")
@@ -40,6 +40,9 @@ tf.flags.DEFINE_integer("train_epochs", 1, "Total number of training epochs.")
 tf.flags.DEFINE_integer("epochs_between_evals", 1,
                         "# of epochs between evaluations.")
 tf.flags.DEFINE_integer("log_steps", 10, "Number of log steps as a logging unit")
+tf.flags.DEFINE_integer("eval_steps", 10000,
+                        "Total number of evaluation steps. If `0`, evaluation "
+                        "after training is skipped.")
 tf.flags.DEFINE_string("mesh_shape", "b1:2;b2:2", "mesh shape")
 tf.flags.DEFINE_string("layout", "hidden_1:b1;classes:b2",
                        "layout rules")
@@ -161,7 +164,7 @@ def model_fn(features, labels, mode, params):
     # restore_hook must come before saver_hook
     return tf.estimator.EstimatorSpec(
         tf.estimator.ModeKeys.TRAIN, loss=tf_loss, train_op=train_op,
-        training_chief_hooks=[restore_hook, saver_hook])
+    training_chief_hooks=[restore_hook, saver_hook])
 
   if mode == tf.estimator.ModeKeys.PREDICT:
     predictions = {
@@ -210,13 +213,12 @@ def run_mnist():
     return ds
 
   def eval_input_fn():
-    return dataset.test(FLAGS.data_dir).batch(
-        FLAGS.batch_size).make_one_shot_iterator().get_next()
+    return dataset.train(FLAGS.data_dir).batch(FLAGS.batch_size).repeat()
 
   # Train and evaluate model.
   for _ in range(FLAGS.train_epochs // FLAGS.epochs_between_evals):
     mnist_classifier.train(input_fn=train_input_fn, hooks=None)
-    eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn)
+    eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn, steps=FLAGS.eval_steps)
     print("\nEvaluation results:\n\t%s\n" % eval_results)
 
 
